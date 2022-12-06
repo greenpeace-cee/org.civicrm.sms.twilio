@@ -28,6 +28,7 @@
 // Load the official Twilio library
 require_once 'Services/Twilio/autoload.php';
 use Twilio\Rest\Client;
+use Twilio\Security\RequestValidator;
 
 /**
  *
@@ -80,7 +81,7 @@ class org_civicrm_sms_twilio extends CRM_SMS_Provider {
    * This is not needed for Twilio
    *
    * @return void
-   */ 
+   */
   function __construct($provider = array(
      ), $skipAuth = TRUE) {
     // initialize vars
@@ -134,7 +135,7 @@ class org_civicrm_sms_twilio extends CRM_SMS_Provider {
    * @access public
    * @since 1.1
    */
-  function authenticate() { 
+  function authenticate() {
       return (TRUE);
   }
 
@@ -187,7 +188,18 @@ class org_civicrm_sms_twilio extends CRM_SMS_Provider {
   }
 
   function inbound() {
-    $like      = "";
+    if (empty($this->_providerInfo['password'])) {
+      throw new Exception(
+        'SMS provider password missing; cannot validate Twilio request signature'
+      );
+    }
+    $validator = new RequestValidator($this->_providerInfo['password']);
+    $url = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on' ? 'https' : 'http') . "://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}";
+    if (!$validator->validate($_SERVER['HTTP_X_TWILIO_SIGNATURE'] ?? NULL, $url, $_POST)) {
+      throw new Exception(
+        'Invalid Twilio signature'
+      );
+    }
     $fromPhone = $this->retrieve('From', 'String');
     return parent::processInbound($fromPhone, $this->retrieve('Body', 'String'), NULL, $this->retrieve('SmsSid', 'String'));
   }
